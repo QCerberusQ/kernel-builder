@@ -1,0 +1,76 @@
+name: Build NP1 Kernel (Image.gz-dtb)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: NothingOSS/android_kernel_msm-5.4_nothing_sm7325
+          ref: sm7325/v/mr
+          path: kernel
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex git gnupg \
+            libncurses-dev libssl-dev python3 unzip zip
+
+      - name: Fetch toolchains
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc32
+          mkdir clang
+          curl -L https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android14-dev/clang-r487747c.tar.gz \
+            | tar -xz -C clang
+
+      - name: Build kernel (Image.gz-dtb)
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export KBUILD_BUILD_USER=orangefox
+          export KBUILD_BUILD_HOST=github
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+
+          export CROSS_COMPILE=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-
+          export CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc32/bin/arm-linux-androideabi-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+
+          mkdir -p out
+          cd kernel
+
+          make O=../out lahaina_QGKI.config
+
+          make -j$(nproc) O=../out \
+            CC=clang \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
+            WERROR=0
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+
+          cp out/arch/arm64/boot/Image.gz-dtb artifacts/ || true
+          cp out/arch/arm64/boot/Image.gz artifacts/ || true
+          cp out/arch/arm64/boot/Image artifacts/ || true
+
+          find out -name "*.ko" -exec cp --parents {} artifacts/ \; || true
+
+          ls -lh artifacts
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NP1-kernel-output
+          path: artifacts/
