@@ -11,8 +11,8 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
-          repository: NothingOSS/android_kernel_msm-5.4_nothing_sm7325
-          ref: sm7325/v/mr
+          repository: LineageOS/android_kernel_nothing_sm7325
+          ref: lineage-23.0
           path: kernel
 
       - name: Install build dependencies
@@ -45,7 +45,8 @@ jobs:
           mkdir -p out
           cd kernel
 
-          make O=../out lahaina_QGKI.config
+          # DOĞRU DEFCONFIG
+          make O=../out vendor/lahaina-qgki_defconfig
 
           make -j$(nproc) O=../out \
             CC=clang \
