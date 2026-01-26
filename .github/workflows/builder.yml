@@ -45,8 +45,6 @@ jobs:
           mkdir -p out
           cd kernel
 
-          make O=../out vendor/lahaina-qgki_defconfig
-
           make -j$(nproc) O=../out Image.gz-dtb \
             CC=clang \
             LD=ld.lld \
