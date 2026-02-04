@@ -38,16 +38,23 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$PATH
-
-          export CC=clang
-          export LD=ld.lld
-          export AR=llvm-ar
-          export NM=llvm-nm
-          export OBJCOPY=llvm-objcopy
-          export OBJDUMP=llvm-objdump
-          export STRIP=llvm-strip
+          
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          
+          make O=../out vendor/lahaina-qgki_defconfig \
+               LLVM=1 LLVM_IAS=1 \
+               CC=clang
+          
+          make -j$(nproc) O=../out Image \
+               LLVM=1 LLVM_IAS=1 \
+               CC=clang \
+               LD=ld.lld \
+               AR=llvm-ar \
+               NM=llvm-nm \
+               OBJCOPY=llvm-objcopy \
+               OBJDUMP=llvm-objdump \
+               STRIP=llvm-strip \
+               WERROR=0
 
           mkdir -p out
           cd kernel
