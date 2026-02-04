@@ -55,21 +55,21 @@ jobs:
           grep CONFIG_QTI_CRYPTO_ICE ../out/.config || true
           grep CONFIG_F2FS_FS_ENCRYPTION ../out/.config || true
       
-          make -j$(nproc) O=../out Image
-      # -------------------------------------------------
-      # 5. Collect Image
-      # -------------------------------------------------
-      - name: Collect kernel Image
+          make -j$(nproc) O=../out Image.gz
+     # -------------------------------------------------
+# 5. Collect kernel Image.gz
+# -------------------------------------------------
+      - name: Collect kernel Image.gz
         run: |
           mkdir -p artifacts
-          cp out/arch/arm64/boot/Image artifacts/Image
+          cp out/arch/arm64/boot/Image.gz artifacts/Image.gz
           ls -lh artifacts
 
-      # -------------------------------------------------
-      # 6. Upload artifact
-      # -------------------------------------------------
-      - name: Upload Image
+# -------------------------------------------------
+# 6. Upload artifact
+# -------------------------------------------------
+      - name: Upload Image.gz
         uses: actions/upload-artifact@v4
         with:
-          name: NP1-kernel-Image
-          path: artifacts/Image
+          name: NP1-kernel-Image.gz
+          path: artifacts/Image.gz
