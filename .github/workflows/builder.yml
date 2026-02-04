@@ -22,7 +22,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             bc bison build-essential curl flex git \
-            libncurses-dev libssl-dev python3 unzip zip
+            libncurses-dev libssl-dev python3 unzip zip \
+            libelf-dev dwarves
+
 
       # 3. Toolchains (ANDROID ŞART)
       - name: Fetch toolchains
