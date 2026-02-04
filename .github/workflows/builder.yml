@@ -49,7 +49,7 @@ jobs:
       
           cd kernel
       
-          make O=../out lahaina-qgki_defconfig
+          make O=../out vendor/lahaina-qgki_defconfig
       
           # Debug amaçlı, job'u düşürmez
           grep CONFIG_QTI_CRYPTO_ICE ../out/.config || true
