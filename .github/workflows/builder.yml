@@ -1,4 +1,4 @@
-name: Build NP1 Kernel (Image)
+name: Build NP1 Kernel Image (OrangeFox Prebuilt)
 
 on:
   workflow_dispatch:
@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -------------------------------------------------
+      # 1. Kernel source
+      # -------------------------------------------------
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
@@ -15,61 +18,66 @@ jobs:
           ref: lineage-23.0
           path: kernel
 
+      # -------------------------------------------------
+      # 2. Dependencies
+      # -------------------------------------------------
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            bc bison build-essential ccache curl flex git gnupg \
+            bc bison build-essential ccache curl flex git \
             libncurses-dev libssl-dev python3 unzip zip
 
+      # -------------------------------------------------
+      # 3. Toolchains
+      # -------------------------------------------------
       - name: Fetch toolchains
         run: |
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc64
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc32
+
           mkdir clang
           curl -L https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android14-dev/clang-r487747c.tar.gz \
             | tar -xz -C clang
 
-      - name: Build kernel (Image)
+      # -------------------------------------------------
+      # 4. Build kernel Image
+      # -------------------------------------------------
+      - name: Build kernel Image
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export KBUILD_BUILD_USER=orangefox
-          export KBUILD_BUILD_HOST=github
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
 
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           export CROSS_COMPILE=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-
-          export CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc32/bin/arm-linux-androideabi-
           export CLANG_TRIPLE=aarch64-linux-gnu-
 
           mkdir -p out
           cd kernel
 
-          make -j$(nproc) O=../out Image.gz-dtb \
-            CC=clang \
-            LD=ld.lld \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip \
-            WERROR=0
+          # Defconfig
+          make O=../out lahaina-qgki_defconfig
 
+          # 🔴 ZORUNLU KONTROL – decrypt için şart
+          grep CONFIG_F2FS_FS_ENCRYPTION ../out/.config
+          grep CONFIG_QTI_CRYPTO_ICE ../out/.config
 
-      - name: Collect artifacts
+          # Build
+          make -j$(nproc) O=../out Image
+
+      # -------------------------------------------------
+      # 5. Collect Image
+      # -------------------------------------------------
+      - name: Collect kernel Image
         run: |
           mkdir -p artifacts
-
-          cp out/arch/arm64/boot/Image artifacts/ || true
-          cp out/arch/arm64/boot/Image artifacts/ || true
-          cp out/arch/arm64/boot/Image artifacts/ || true
-
-          find out -name "*.ko" -exec cp --parents {} artifacts/ \; || true
-
+          cp out/arch/arm64/boot/Image artifacts/Image
           ls -lh artifacts
 
-      - name: Upload artifacts
+      # -------------------------------------------------
+      # 6. Upload artifact
+      # -------------------------------------------------
+      - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
-          name: NP1-kernel-output
-          path: artifacts/
+          name: NP1-kernel-Image
+          path: artifacts/Image
