@@ -22,8 +22,14 @@ jobs:
             bc bison build-essential ccache curl flex git \
             libncurses-dev libssl-dev python3 unzip zip
 
-      - name: Fetch clang
+      - name: Fetch toolchains
         run: |
+          # GCC (sadece objcopy/strip için)
+          git clone --depth=1 \
+            https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 \
+            gcc64
+
+          # Clang
           mkdir clang
           curl -L https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android14-dev/clang-r487747c.tar.gz \
             | tar -xz -C clang
@@ -32,7 +38,8 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$PATH
 
           export CC=clang
           export LD=ld.lld
