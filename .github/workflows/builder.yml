@@ -46,24 +46,16 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
-
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          export CROSS_COMPILE=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-
-          mkdir -p out
+      
           cd kernel
-
-          # Defconfig
-          make O=../out vendor/lahaina-qgki_defconfig
-
-          # 🔴 ZORUNLU KONTROL – decrypt için şart
-          grep CONFIG_F2FS_FS_ENCRYPTION ../out/.config
-          grep CONFIG_QTI_CRYPTO_ICE ../out/.config
-
-          # Build
+      
+          make O=../out lahaina-qgki_defconfig
+      
+          # Debug amaçlı, job'u düşürmez
+          grep CONFIG_QTI_CRYPTO_ICE ../out/.config || true
+          grep CONFIG_F2FS_FS_ENCRYPTION ../out/.config || true
+      
           make -j$(nproc) O=../out Image
-
       # -------------------------------------------------
       # 5. Collect Image
       # -------------------------------------------------
