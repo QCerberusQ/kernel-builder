@@ -55,7 +55,7 @@ jobs:
           cd kernel
 
           # Defconfig
-          make O=../out lahaina-qgki_defconfig
+          make O=../out vendor/lahaina-qgki_defconfig
 
           # 🔴 ZORUNLU KONTROL – decrypt için şart
           grep CONFIG_F2FS_FS_ENCRYPTION ../out/.config
