@@ -11,8 +11,8 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
-          repository: QCerberusQ/android_kernel_nothing_sm7325
-          ref: lineage-23.0
+          repository: LineageOS/android_kernel_nothing_sm7325
+          ref: lineage-23.2
           path: kernel
 
       - name: Install build dependencies
