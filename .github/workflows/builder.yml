@@ -11,7 +11,7 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
-          repository: https://github.com/crdroidandroid/android_kernel_nothing_sm7325
+          repository: crdroidandroid/android_kernel_nothing_sm7325
           ref: 16.0
           path: kernel
 
