@@ -1,4 +1,4 @@
-name: Build NP1 Recovery Kernel for OrangeFox
+name: Build NP1 AOSP Recovery Kernel for OrangeFox
 
 on:
   workflow_dispatch:
