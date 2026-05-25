@@ -15,6 +15,22 @@ jobs:
           ref: 'lineage-23.2'
           path: kernel
 
+      - name: Find correct Clang version    # ← BURAYA EKLE
+        run: |
+          cd kernel
+          
+          echo "=== build.config dosyaları ==="
+          find . -name "build.config*" | head -20
+          
+          echo ""
+          echo "=== Clang referansları ==="
+          grep -r "clang-r\|CLANG_PREBUILT\|CLANG_VERSION" \
+            build.config* Makefile 2>/dev/null | head -10
+          
+          echo ""
+          echo "=== Kernel versiyonu ==="
+          head -5 Makefile
+      
       - name: Install build dependencies
         run: |
           sudo apt-get update
