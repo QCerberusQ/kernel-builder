@@ -1,0 +1,204 @@
+name: Build NP1 Recovery Kernel for OrangeFox
+
+on:
+  workflow_dispatch:
+    inputs:
+      clang_version:
+        description: 'ZYC Clang version'
+        required: true
+        default: '16'
+        type: choice
+        options:
+          - '15'
+          - '16'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: LineageOS/android_kernel_nothing_sm7325
+          ref: 'lineage-23.2'
+          path: kernel
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison flex libssl-dev make libelf-dev lz4 cpio \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            build-essential clang lld llvm \
+            python3 zip git ccache wget xz-utils zstd
+
+      - name: Setup ZYC Clang
+        run: |
+          set -e
+          CLANG_VER="${{ github.event.inputs.clang_version }}"
+
+          if [ "$CLANG_VER" = "16" ]; then
+            ZYC_URL="https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260510-release/Clang-16.0.6-20260510.tar.gz"
+            TOOLCHAIN_DIR="$HOME/toolchains/zyc-clang-16"
+          else
+            ZYC_URL="https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20260507-release/Clang-15.0.7-20260507.tar.gz"
+            TOOLCHAIN_DIR="$HOME/toolchains/zyc-clang-15"
+          fi
+
+          mkdir -p "$TOOLCHAIN_DIR"
+          wget -q --show-progress "$ZYC_URL" -O /tmp/zyc-clang.tar.gz
+          tar -xzf /tmp/zyc-clang.tar.gz -C "$TOOLCHAIN_DIR"
+          rm /tmp/zyc-clang.tar.gz
+
+          "$TOOLCHAIN_DIR/bin/clang" --version
+          echo "✅ ZYC Clang $CLANG_VER installed"
+
+          # Export build env
+          echo "$TOOLCHAIN_DIR/bin" >> $GITHUB_PATH
+          cat >> $GITHUB_ENV << EOF
+          ZYC_PATH=$TOOLCHAIN_DIR
+          ARCH=arm64
+          SUBARCH=arm64
+          LLVM=1
+          LLVM_IAS=1
+          CC=$TOOLCHAIN_DIR/bin/clang
+          AR=$TOOLCHAIN_DIR/bin/llvm-ar
+          NM=$TOOLCHAIN_DIR/bin/llvm-nm
+          LD=$TOOLCHAIN_DIR/bin/ld.lld
+          OBJCOPY=$TOOLCHAIN_DIR/bin/llvm-objcopy
+          OBJDUMP=$TOOLCHAIN_DIR/bin/llvm-objdump
+          STRIP=$TOOLCHAIN_DIR/bin/llvm-strip
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          KBUILD_BUILD_USER=orangefox
+          KBUILD_BUILD_HOST=github
+          EOF
+
+      - name: Explore available defconfigs
+        run: |
+          cd kernel
+          echo "=== Lahaina defconfigs ==="
+          find arch/arm64/configs -name "*lahaina*" | sort
+          echo ""
+          echo "=== Vendor config fragments ==="
+          ls arch/arm64/configs/vendor/ 2>/dev/null | head -20
+          echo ""
+          echo "=== QGKI fragments ==="
+          find . -path "*/configs/vendor/*" -name "*QGKI*" | sort
+
+      - name: Configure kernel
+        run: |
+          cd kernel
+          make O=../out \
+            ARCH=$ARCH \
+            CC=$CC \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_COMPAT=$CROSS_COMPILE_ARM32 \
+            AR=$AR NM=$NM LD=$LD \
+            OBJCOPY=$OBJCOPY OBJDUMP=$OBJDUMP STRIP=$STRIP \
+            HOSTCC=$CC HOSTCXX=$ZYC_PATH/bin/clang++ \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            LLVM=$LLVM LLVM_IAS=$LLVM_IAS \
+            KCFLAGS="-Wno-unknown-warning-option" \
+            vendor/lahaina-qgki_defconfig
+
+          # Config özeti
+          echo ""
+          echo "=== Config Summary ==="
+          echo "Built-in (=y): $(grep -c '=y' ../out/.config)"
+          echo "Module   (=m): $(grep -c '=m' ../out/.config)"
+          echo ""
+          echo "=== Recovery-Critical Configs ==="
+          grep -E "(FS_ENCRYPTION|DM_CRYPT|DM_DEFAULT_KEY|SCSI_UFS|USB_DWC3|USB_CONFIGFS|EXT4_FS|F2FS_FS|EROFS_FS|TOUCHSCREEN_FTS)" ../out/.config
+
+      - name: Build kernel Image + modules
+        run: |
+          cd kernel
+          make O=../out \
+            ARCH=$ARCH \
+            CC=$CC \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_COMPAT=$CROSS_COMPILE_ARM32 \
+            AR=$AR NM=$NM LD=$LD \
+            OBJCOPY=$OBJCOPY OBJDUMP=$OBJDUMP STRIP=$STRIP \
+            HOSTCC=$CC HOSTCXX=$ZYC_PATH/bin/clang++ \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            LLVM=$LLVM LLVM_IAS=$LLVM_IAS \
+            KCFLAGS="-Wno-unknown-warning-option" \
+            -j$(nproc --all) Image modules dtbs
+
+      - name: Verify build output
+        run: |
+          if [ -f "out/arch/arm64/boot/Image" ]; then
+            SIZE=$(stat -c%s "out/arch/arm64/boot/Image")
+            echo "✅ Image found — $(numfmt --to=iec $SIZE)"
+          else
+            echo "❌ Image not found — build failed"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Kernel Version ==="
+          strings out/arch/arm64/boot/Image | grep "Linux version" | head -1
+
+      - name: Collect recovery artifacts
+        run: |
+          mkdir -p artifacts/prebuilt/modules
+
+          # Kernel Image (OrangeFox prebuilt olarak kullanılacak)
+          cp out/arch/arm64/boot/Image artifacts/prebuilt/Image
+          echo "✅ Image → prebuilt/Image"
+
+          # Recovery için gerekli modüller
+          echo ""
+          echo "=== Recovery Modules ==="
+          RECOVERY_MODULES=(
+            "fts_tp.ko"
+            "goodix_fp.ko"
+            "apr_dlkm.ko"
+            "q6_dlkm.ko"
+            "q6_notifier_dlkm.ko"
+            "q6_pdr_dlkm.ko"
+            "snd_event_dlkm.ko"
+            "adsp_loader_dlkm.ko"
+            "swr_haptics_dlkm.ko"
+          )
+
+          for mod in "${RECOVERY_MODULES[@]}"; do
+            FOUND=$(find out -name "$mod" -type f | head -1)
+            if [ -n "$FOUND" ]; then
+              cp "$FOUND" artifacts/prebuilt/modules/
+              SIZE=$(stat -c%s "$FOUND")
+              echo "  ✅ $mod ($(numfmt --to=iec $SIZE))"
+            else
+              echo "  ⚠️  $mod bulunamadı!"
+            fi
+          done
+
+          # Vermagic kontrolü
+          echo ""
+          echo "=== Module Vermagic ==="
+          if command -v modinfo &>/dev/null; then
+            modinfo artifacts/prebuilt/modules/fts_tp.ko 2>/dev/null | grep vermagic || true
+          else
+            strings artifacts/prebuilt/modules/fts_tp.ko | grep "vermagic=" | head -1 || true
+          fi
+
+          echo ""
+          echo "=== Final Artifact Sizes ==="
+          ls -lh artifacts/prebuilt/Image
+          ls -lh artifacts/prebuilt/modules/
+
+      - name: Upload prebuilt kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: NP1-OrangeFox-Prebuilt-Kernel
+          path: artifacts/prebuilt/Image
+
+      - name: Upload recovery modules
+        uses: actions/upload-artifact@v4
+        with:
+          name: NP1-OrangeFox-Recovery-Modules
+          path: artifacts/prebuilt/modules/
