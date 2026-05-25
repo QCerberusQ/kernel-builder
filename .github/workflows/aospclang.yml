@@ -1,0 +1,136 @@
+name: Build NP1 Recovery Kernel for OrangeFox
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: LineageOS/android_kernel_nothing_sm7325
+          ref: 'lineage-23.2'
+          path: kernel
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison flex libssl-dev make libelf-dev lz4 cpio \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            build-essential lld llvm \
+            python3 zip git wget
+
+      - name: Fetch AOSP Clang (clang-r416183b)
+        run: |
+          set -e
+          mkdir -p clang
+          
+          echo "📥 Downloading AOSP clang-r416183b..."
+          curl -L \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b.tar.gz" \
+            -o /tmp/aosp-clang.tar.gz
+          
+          tar -xzf /tmp/aosp-clang.tar.gz -C clang
+          rm /tmp/aosp-clang.tar.gz
+          
+          clang/bin/clang --version
+          echo "✅ AOSP clang-r416183b installed"
+
+          TOOLCHAIN_DIR="$GITHUB_WORKSPACE/clang"
+          echo "$TOOLCHAIN_DIR/bin" >> $GITHUB_PATH
+          cat >> $GITHUB_ENV << EOF
+          ARCH=arm64
+          SUBARCH=arm64
+          CC=$TOOLCHAIN_DIR/bin/clang
+          AR=$TOOLCHAIN_DIR/bin/llvm-ar
+          NM=$TOOLCHAIN_DIR/bin/llvm-nm
+          LD=$TOOLCHAIN_DIR/bin/ld.lld
+          OBJCOPY=$TOOLCHAIN_DIR/bin/llvm-objcopy
+          OBJDUMP=$TOOLCHAIN_DIR/bin/llvm-objdump
+          STRIP=$TOOLCHAIN_DIR/bin/llvm-strip
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          KBUILD_BUILD_USER=orangefox
+          KBUILD_BUILD_HOST=github
+          EOF
+
+      - name: Fetch GCC cross-compilers
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc32
+          
+          echo "CROSS_COMPILE=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-" >> $GITHUB_ENV
+          echo "CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc32/bin/arm-linux-androideabi-" >> $GITHUB_ENV
+
+      - name: Configure kernel
+        run: |
+          cd kernel
+          make O=../out \
+            ARCH=$ARCH \
+            CC=$CC \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            AR=$AR NM=$NM LD=$LD \
+            OBJCOPY=$OBJCOPY OBJDUMP=$OBJDUMP STRIP=$STRIP \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            vendor/lahaina-qgki_defconfig
+
+          echo ""
+          echo "=== Config Summary ==="
+          echo "Built-in (=y): $(grep -c '=y' ../out/.config)"
+          echo "Module   (=m): $(grep -c '=m' ../out/.config)"
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          make -j$(nproc --all) O=../out \
+            ARCH=$ARCH \
+            CC=$CC \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            AR=$AR NM=$NM LD=$LD \
+            OBJCOPY=$OBJCOPY OBJDUMP=$OBJDUMP STRIP=$STRIP \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            Image modules dtbs
+
+      - name: Verify build
+        run: |
+          if [ -f "out/arch/arm64/boot/Image" ]; then
+            SIZE=$(stat -c%s "out/arch/arm64/boot/Image")
+            echo "✅ Image: $(numfmt --to=iec $SIZE)"
+            strings out/arch/arm64/boot/Image | grep "Linux version" | head -1
+          else
+            echo "❌ Build failed"
+            exit 1
+          fi
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/prebuilt/modules
+          cp out/arch/arm64/boot/Image artifacts/prebuilt/
+
+          MODULES=(fts_tp goodix_fp apr_dlkm q6_dlkm q6_notifier_dlkm q6_pdr_dlkm snd_event_dlkm adsp_loader_dlkm swr_haptics_dlkm)
+          for mod in "${MODULES[@]}"; do
+            FOUND=$(find out -name "${mod}.ko" -type f | head -1)
+            if [ -n "$FOUND" ]; then
+              cp "$FOUND" artifacts/prebuilt/modules/
+              echo "✅ ${mod}.ko"
+            else
+              echo "⚠️ ${mod}.ko bulunamadı"
+            fi
+          done
+
+          echo ""
+          ls -lh artifacts/prebuilt/Image
+          ls -lh artifacts/prebuilt/modules/
+
+      - name: Upload kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: NP1-OrangeFox-Kernel
+          path: artifacts/prebuilt/
