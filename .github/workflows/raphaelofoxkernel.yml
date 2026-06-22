@@ -23,28 +23,27 @@ jobs:
             build-essential lld llvm \
             python3 python-is-python3 zip git wget curl
 
-      - name: Fetch Neutron Clang 19 (Zundamon's Compiler)
+      - name: Fetch Neutron Clang 19 (10032024)
         run: |
           set -e
           mkdir -p $GITHUB_WORKSPACE/clang
           cd $GITHUB_WORKSPACE/clang
           
-          echo "📥 Downloading Neutron Clang via antman..."
+          echo "📥 Downloading Neutron Clang 19 via antman..."
           curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
           chmod +x antman
-          ./antman -S
+          ./antman -S=10032024
           ./antman --patch=glibc
           
           echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
           
           $GITHUB_WORKSPACE/clang/bin/clang --version
-          echo "✅ Neutron Clang 19 installed"
+          echo "✅ Neutron Clang 19 (10032024) installed"
 
           cat >> $GITHUB_ENV << EOF
           TOOLCHAIN_DIR=$GITHUB_WORKSPACE/clang
           ARCH=arm64
           SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
           KBUILD_BUILD_USER=QCerberusQ
           KBUILD_BUILD_HOST=orangefox
           EOF
@@ -76,7 +75,6 @@ jobs:
             STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
-            CLANG_TRIPLE=$CLANG_TRIPLE \
             raphael_defconfig
 
           echo ""
@@ -100,10 +98,8 @@ jobs:
             STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
-            CLANG_TRIPLE=$CLANG_TRIPLE \
             KCFLAGS="-Wno-error -Wno-attribute-alias -Wno-default-const-init-field-unsafe" \
             Image.gz-dtb
-
 
       - name: Verify build
         run: |
