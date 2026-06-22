@@ -14,7 +14,7 @@ jobs:
           repository: QCerberusQ/kernel_xiaomi_raphael
           ref: 'oss-base'
 
-    - name: Install build dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
