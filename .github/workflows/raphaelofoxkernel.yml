@@ -114,7 +114,7 @@ jobs:
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
             CLANG_TRIPLE=$CLANG_TRIPLE \
-            KCFLAGS="-Wno-error -Wno-attribute-alias -Wno-default-const-init-field-unsafe" \
+            KCFLAGS="-Wno-error" \
             Image.gz-dtb
 
       - name: Verify build
