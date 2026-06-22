@@ -78,11 +78,20 @@ jobs:
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
             CLANG_TRIPLE=$CLANG_TRIPLE \
             raphael_defconfig
-
-          # Gerçek hatayı görebilmek için StackProtector'ı geçici olarak kapatıyoruz
-          sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/CONFIG_CC_STACKPROTECTOR_NONE=y/g' out/.config
-          sed -i 's/CONFIG_CC_STACKPROTECTOR_REGULAR=y/CONFIG_CC_STACKPROTECTOR_NONE=y/g' out/.config
-
+          echo "🔧 StackProtector ayarı güvenli şekilde kapatılıyor..."
+          ./scripts/config --file out/.config --disable CC_STACKPROTECTOR_STRONG
+          ./scripts/config --file out/.config --disable CC_STACKPROTECTOR_REGULAR
+          ./scripts/config --file out/.config --enable CC_STACKPROTECTOR_NONE
+          echo "🔄 Config güncelleniyor (Soru sorulmasını engellemek için)..."
+          make O=out \
+            ARCH=$ARCH \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            CC="$TOOLCHAIN_DIR/bin/clang" \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            olddefconfig
           echo ""
           echo "=== Config Summary ==="
           echo "Built-in (=y): $(grep -c '=y' out/.config)"
