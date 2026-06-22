@@ -120,7 +120,9 @@ jobs:
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
             CLANG_TRIPLE=$CLANG_TRIPLE \
+            KCFLAGS="-Wno-error=attribute-alias -Wno-attribute-alias -Wno-error=pointer-sign -Wno-error=enum-conversion" \
             Image.gz-dtb
+
 
       - name: Verify build
         run: |
