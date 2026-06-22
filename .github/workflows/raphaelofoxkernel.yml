@@ -11,8 +11,8 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
-          repository: QCerberusQ/bool-x_xiaomi_raphael
-          ref: '14-DSPocd'
+          repository: QCerberusQ/kernel_xiaomi_raphael
+          ref: 'oss-base'
 
       - name: Install build dependencies
         run: |
