@@ -44,11 +44,12 @@ jobs:
           TOOLCHAIN_DIR=$GITHUB_WORKSPACE/clang
           ARCH=arm64
           SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
           KBUILD_BUILD_USER=QCerberusQ
           KBUILD_BUILD_HOST=orangefox
           EOF
 
-      - name: Fetch GCC cross-compilers (Fallback for Kernel 4.14)
+      - name: Fetch GCC cross-compilers
         run: |
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc64
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc32
@@ -75,6 +76,7 @@ jobs:
             STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
             vendor/unified_raphael_defconfig
 
           echo ""
