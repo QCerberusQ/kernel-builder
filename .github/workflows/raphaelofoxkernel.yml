@@ -77,7 +77,7 @@ jobs:
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
             CLANG_TRIPLE=$CLANG_TRIPLE \
-            raphael_stock_defconfig
+            raphael_defconfig
 
           # Gerçek hatayı görebilmek için StackProtector'ı geçici olarak kapatıyoruz
           sed -i 's/CONFIG_CC_STACKPROTECTOR_STRONG=y/CONFIG_CC_STACKPROTECTOR_NONE=y/g' out/.config
