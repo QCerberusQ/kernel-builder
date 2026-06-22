@@ -14,13 +14,13 @@ jobs:
           repository: QCerberusQ/kernel_xiaomi_raphael
           ref: 'oss-base'
 
-      - name: Install build dependencies
+    - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             bc bison flex libssl-dev make libelf-dev libyaml-dev lz4 cpio \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            build-essential lld llvm \
+            build-essential lld llvm pkg-config libncurses-dev \
             python3 python-is-python3 zip git wget curl
 
       - name: Fetch Neutron Clang 19 (10032024)
