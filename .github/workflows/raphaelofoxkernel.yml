@@ -1,0 +1,135 @@
+name: Build Raphael Recovery Kernel for OrangeFox
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        # NOT: Eğer bu yml dosyasını doğrudan kernel reponuzun içine koyacaksanız
+        # aşağıdaki 'repository', 'ref' ve 'path' kısımlarını silebilirsiniz. 
+        # Başka repodan çalışacaksa kendi kernel reponuzu buraya yazın.
+        # with:
+        #   repository: Sizin/Kernel_Reponuz
+        #   ref: 'branch_adiniz'
+        #   path: kernel
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison flex libssl-dev make libelf-dev lz4 cpio \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            build-essential lld llvm \
+            python3 zip git wget curl
+
+      - name: Fetch Neutron Clang 19 (Zundamon's Compiler)
+        run: |
+          set -e
+          mkdir -p $GITHUB_WORKSPACE/clang
+          cd $GITHUB_WORKSPACE/clang
+          
+          echo "📥 Downloading Neutron Clang via antman..."
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+          chmod +x antman
+          ./antman -S
+          ./antman --patch=glibc
+          
+          $GITHUB_WORKSPACE/clang/bin/clang --version
+          echo "✅ Neutron Clang 19 installed"
+
+          cat >> $GITHUB_ENV << EOF
+          TOOLCHAIN_DIR=$GITHUB_WORKSPACE/clang
+          ARCH=arm64
+          SUBARCH=arm64
+          KBUILD_BUILD_USER=zundamon
+          KBUILD_BUILD_HOST=orangefox
+          EOF
+
+      - name: Fetch GCC cross-compilers (Fallback for Kernel 4.14)
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc32
+          
+          echo "CROSS_COMPILE=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-" >> $GITHUB_ENV
+          echo "CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc32/bin/arm-linux-androideabi-" >> $GITHUB_ENV
+
+      - name: Configure kernel
+        run: |
+          # Eğer kodu belirli bir klasöre (örn: path: kernel) indirdiyseniz başına cd kernel ekleyin:
+          # cd kernel 
+          
+          echo "⚙️ Configuring unified_raphael_defconfig..."
+          make O=out \
+            ARCH=$ARCH \
+            CC="$TOOLCHAIN_DIR/bin/clang" \
+            AR="$TOOLCHAIN_DIR/bin/llvm-ar" \
+            NM="$TOOLCHAIN_DIR/bin/llvm-nm" \
+            LD="$TOOLCHAIN_DIR/bin/ld.lld" \
+            OBJCOPY="$TOOLCHAIN_DIR/bin/llvm-objcopy" \
+            OBJDUMP="$TOOLCHAIN_DIR/bin/llvm-objdump" \
+            STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            vendor/unified_raphael_defconfig
+
+          echo ""
+          echo "=== Config Summary ==="
+          echo "Built-in (=y): $(grep -c '=y' out/.config)"
+          echo "Module   (=m): $(grep -c '=m' out/.config)"
+
+      - name: Build kernel
+        run: |
+          # cd kernel
+          
+          echo "🚀 Compiling Kernel..."
+          make -j$(nproc --all) O=out \
+            ARCH=$ARCH \
+            CC="$TOOLCHAIN_DIR/bin/clang" \
+            AR="$TOOLCHAIN_DIR/bin/llvm-ar" \
+            NM="$TOOLCHAIN_DIR/bin/llvm-nm" \
+            LD="$TOOLCHAIN_DIR/bin/ld.lld" \
+            OBJCOPY="$TOOLCHAIN_DIR/bin/llvm-objcopy" \
+            OBJDUMP="$TOOLCHAIN_DIR/bin/llvm-objdump" \
+            STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            Image.gz-dtb
+
+      - name: Verify build
+        run: |
+          # Raphael kernel 4.14 genellikle Image.gz-dtb üretir
+          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
+            SIZE=$(stat -c%s "out/arch/arm64/boot/Image.gz-dtb")
+            echo "✅ Image.gz-dtb created successfully: $(numfmt --to=iec $SIZE)"
+            strings out/arch/arm64/boot/Image | grep "Linux version" | head -1
+          elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "✅ Image.gz created successfully"
+          else
+            echo "❌ Build failed - Image not found!"
+            exit 1
+          fi
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/
+          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
+            cp out/arch/arm64/boot/Image.gz-dtb artifacts/
+          elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            cp out/arch/arm64/boot/Image.gz artifacts/
+          fi
+          
+          # Raphael cihazı recovery ortamında harici (.ko) modüllere ihtiyaç duymaz.
+          # Her şey built-in olduğu için sadece Image dosyasını alıyoruz.
+          echo "✅ Artifacts ready"
+          ls -lh artifacts/
+
+      - name: Upload kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: Raphael-OrangeFox-Kernel
+          path: artifacts/
