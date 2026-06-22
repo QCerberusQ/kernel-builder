@@ -1,35 +1,154 @@
-Run echo "🚀 Compiling Kernel..."
-🚀 Compiling Kernel...
-make[1]: Entering directory '/home/runner/work/kernel-builder/kernel-builder/out'
-  GEN     ./Makefile
-scripts/kconfig/conf  --silentoldconfig Kconfig
-.config:626:warning: symbol value '' invalid for LITTLE_CPU_MASK
-.config:627:warning: symbol value '' invalid for BIG_CPU_MASK
-.config:628:warning: symbol value '' invalid for PRIME_CPU_MASK
-*
-* Restart config...
-*
-*
-* Kernel Features
-*
-Page size
-> 1. 4KB (ARM64_4K_PAGES)
-  2. 16KB (ARM64_16K_PAGES)
-  3. 64KB (ARM64_64K_PAGES)
-choice[1-3?]: 1
-Virtual address space size
-> 1. 39-bit (ARM64_VA_BITS_39)
-  2. 48-bit (ARM64_VA_BITS_48)
-choice[1-2?]: 1
-Build big-endian kernel (CPU_BIG_ENDIAN) [N/y/?] n
-Multi-core scheduler support (SCHED_MC) [Y/n/?] y
-SMT scheduler support (SCHED_SMT) [N/y/?] n
-Maximum number of CPUs (2-4096) (NR_CPUS) [8] 8
-Bitmask of available LITTLE CPUs (LITTLE_CPU_MASK) [] (NEW) aborted!
-Console input/output is redirected. Run 'make oldconfig' to update configuration.
-make[3]: *** [../scripts/kconfig/Makefile:40: silentoldconfig] Error 1
-make[2]: *** [../Makefile:594: silentoldconfig] Error 2
-make[1]: *** No rule to make target 'include/config/auto.conf', needed by 'include/config/kernel.release'.  Stop.
-make[1]: Leaving directory '/home/runner/work/kernel-builder/kernel-builder/out'
-make: *** [Makefile:155: sub-make] Error 2
-Error: Process completed with exit code 2.
+name: Build Raphael Recovery Kernel for OrangeFox
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: QCerberusQ/bool-x_xiaomi_raphael
+          ref: '14-DSPocd'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison flex libssl-dev make libelf-dev lz4 cpio \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            build-essential lld llvm \
+            python3 python-is-python3 zip git wget curl
+
+      - name: Fetch Neutron Clang 19 (Zundamon's Compiler)
+        run: |
+          set -e
+          mkdir -p $GITHUB_WORKSPACE/clang
+          cd $GITHUB_WORKSPACE/clang
+          
+          echo "📥 Downloading Neutron Clang via antman..."
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+          chmod +x antman
+          ./antman -S
+          ./antman --patch=glibc
+          
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
+          
+          $GITHUB_WORKSPACE/clang/bin/clang --version
+          echo "✅ Neutron Clang 19 installed"
+
+          cat >> $GITHUB_ENV << EOF
+          TOOLCHAIN_DIR=$GITHUB_WORKSPACE/clang
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          KBUILD_BUILD_USER=QCerberusQ
+          KBUILD_BUILD_HOST=orangefox
+          EOF
+
+      - name: Fetch GCC cross-compilers
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc32
+          
+          echo "$GITHUB_WORKSPACE/gcc64/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/gcc32/bin" >> $GITHUB_PATH
+          
+          echo "CROSS_COMPILE=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-" >> $GITHUB_ENV
+          echo "CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/gcc32/bin/arm-linux-androideabi-" >> $GITHUB_ENV
+
+      - name: Configure kernel
+        run: |
+          echo "⚙️ Creating unified_raphael_defconfig from TRUE kernel source..."
+          
+          # Repodaki GERÇEK parçaları kullanıyoruz (Sizin repoda xiaomi/ klasörü yok, raphael_defconfig var!)
+          cat arch/arm64/configs/vendor/sm8150-perf_defconfig \
+              arch/arm64/configs/raphael_defconfig \
+              > arch/arm64/configs/vendor/unified_raphael_defconfig
+              
+          # Visionox, Samsung Touch ve Şifreleme ayarlarını ekliyoruz
+          cat >> arch/arm64/configs/vendor/unified_raphael_defconfig << 'EOF'
+          CONFIG_TOUCHSCREEN_ST=y
+          CONFIG_TOUCHSCREEN_SYNAPTICS_TCM=y
+          CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_CORE=y
+          CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_TOUCH=y
+          CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_DEVICE=y
+          CONFIG_TOUCHSCREEN_SYNAPTICS_TCM_RECOVERY=y
+          CONFIG_TOUCHSCREEN_GOODIX_GTX8=y
+          CONFIG_EXT4_ENCRYPTION=y
+          EOF
+          
+          echo "⚙️ Configuring kernel with unified defconfig..."
+          make O=out \
+            ARCH=$ARCH \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            CC="$TOOLCHAIN_DIR/bin/clang" \
+            AR="$TOOLCHAIN_DIR/bin/llvm-ar" \
+            NM="$TOOLCHAIN_DIR/bin/llvm-nm" \
+            LD="$TOOLCHAIN_DIR/bin/ld.lld" \
+            OBJCOPY="$TOOLCHAIN_DIR/bin/llvm-objcopy" \
+            OBJDUMP="$TOOLCHAIN_DIR/bin/llvm-objdump" \
+            STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            vendor/unified_raphael_defconfig
+
+          echo ""
+          echo "=== Config Summary ==="
+          echo "Built-in (=y): $(grep -c '=y' out/.config)"
+          echo "Module   (=m): $(grep -c '=m' out/.config)"
+
+      - name: Build kernel
+        run: |
+          echo "🚀 Compiling Kernel..."
+          make -j$(nproc --all) O=out \
+            ARCH=$ARCH \
+            LLVM=1 \
+            LLVM_IAS=1 \
+            CC="$TOOLCHAIN_DIR/bin/clang" \
+            AR="$TOOLCHAIN_DIR/bin/llvm-ar" \
+            NM="$TOOLCHAIN_DIR/bin/llvm-nm" \
+            LD="$TOOLCHAIN_DIR/bin/ld.lld" \
+            OBJCOPY="$TOOLCHAIN_DIR/bin/llvm-objcopy" \
+            OBJDUMP="$TOOLCHAIN_DIR/bin/llvm-objdump" \
+            STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
+            CROSS_COMPILE=$CROSS_COMPILE \
+            CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
+            Image.gz-dtb
+
+      - name: Verify build
+        run: |
+          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
+            SIZE=$(stat -c%s "out/arch/arm64/boot/Image.gz-dtb")
+            echo "✅ Image.gz-dtb created successfully: $(numfmt --to=iec $SIZE)"
+            strings out/arch/arm64/boot/Image | grep "Linux version" | head -1
+          elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "✅ Image.gz created successfully"
+          else
+            echo "❌ Build failed - Image not found!"
+            exit 1
+          fi
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/
+          if [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
+            cp out/arch/arm64/boot/Image.gz-dtb artifacts/
+          elif [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            cp out/arch/arm64/boot/Image.gz artifacts/
+          fi
+          
+          echo "✅ Artifacts ready"
+          ls -lh artifacts/
+
+      - name: Upload kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: Raphael-OrangeFox-Kernel
+          path: artifacts/
