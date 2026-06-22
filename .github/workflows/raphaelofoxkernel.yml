@@ -98,6 +98,7 @@ jobs:
             STRIP="$TOOLCHAIN_DIR/bin/llvm-strip" \
             CROSS_COMPILE=$CROSS_COMPILE \
             CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 \
+            CLANG_TRIPLE=$CLANG_TRIPLE \
             Image.gz-dtb
 
       - name: Verify build
