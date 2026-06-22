@@ -105,6 +105,7 @@ jobs:
             ARCH=$ARCH \
             LLVM=1 \
             LLVM_IAS=1 \
+            HOSTLDFLAGS="-lyaml" \
             CC="$TOOLCHAIN_DIR/bin/clang" \
             AR="$TOOLCHAIN_DIR/bin/llvm-ar" \
             NM="$TOOLCHAIN_DIR/bin/llvm-nm" \
